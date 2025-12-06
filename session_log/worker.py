@@ -13,6 +13,20 @@ def upload_to_s3(request_id, audio_bytes):
     s3_client.put_object(Bucket="asr-logs", Key=s3_key, Body=audio_bytes)
 
 
+def save_to_mongo(request_id, s3_key, transcript, meta):
+
+    log_entry = {
+        "request_id": request_id,
+        "s3_path": s3_key,
+        "transcript": transcript,
+        "meta": meta,
+    }
+
+    with open("asr_session_logs.jsonl", "a", encoding="utf-8") as f:
+
+        f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+
+
 async def main():
     # 1. 连接 NATS
     nc = await nats.connect("nats://nats:4222")
@@ -41,7 +55,7 @@ async def main():
 
                 # --- 这里执行耗时操作 ---
                 upload_to_s3(request_id, data["audio"])
-                # save_to_mongo(data["meta"])
+                save_to_mongo(data["meta"])
                 # -----------------------
 
                 # 关键：处理成功后发送确认 (Ack)
