@@ -5,6 +5,13 @@ import nats
 import boto3
 import os
 
+s3_client = boto3.client("s3")
+
+
+def upload_to_s3(request_id, audio_bytes):
+    s3_key = f"raw_audio/{request_id}.wav"
+    s3_client.put_object(Bucket="asr-logs", Key=s3_key, Body=audio_bytes)
+
 
 async def main():
     # 1. 连接 NATS
@@ -33,8 +40,8 @@ async def main():
                 print(f"Processing log: {data['request_id']}")
 
                 # --- 这里执行耗时操作 ---
-                # upload_to_s3(data['audio'])
-                # save_to_mongo(data['meta'])
+                upload_to_s3(request_id, data["audio"])
+                # save_to_mongo(data["meta"])
                 # -----------------------
 
                 # 关键：处理成功后发送确认 (Ack)
