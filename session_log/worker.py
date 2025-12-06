@@ -14,7 +14,6 @@ def upload_to_s3(request_id, audio_bytes):
 
 
 def save_to_mongo(request_id, s3_key, transcript, meta):
-
     log_entry = {
         "request_id": request_id,
         "s3_path": s3_key,
@@ -23,7 +22,6 @@ def save_to_mongo(request_id, s3_key, transcript, meta):
     }
 
     with open("asr_session_logs.jsonl", "a", encoding="utf-8") as f:
-
         f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
 
