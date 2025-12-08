@@ -7,7 +7,7 @@ from io import BytesIO
 
 # --- 配置部分 ---
 # 你可以修改这里，或者通过环境变量传入
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://10.0.0.27:39001")
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://10.0.0.27:30091")
 ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")  # 请替换为你的实际账号
 SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "password123")  # 请替换为你的实际密码
 
