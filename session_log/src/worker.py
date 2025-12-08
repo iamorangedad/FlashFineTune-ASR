@@ -53,26 +53,16 @@ async def process_msg(msg):
 
 
 async def main():
-    # 确保 Bucket 存在
-    try:
-        s3.create_bucket(Bucket=Config.S3_BUCKET)
-    except:
-        pass
-
     nc = await nats.connect(Config.NATS_URL)
     js = nc.jetstream()
-
     # 创建 Stream (幂等)
     try:
         await js.add_stream(name="ASR_LOGS", subjects=["asr.logs.*"])
     except:
         pass
-
     # 持久化订阅
     psub = await js.pull_subscribe("asr.logs.new", durable="worker_grp_1")
-
     print("🚀 Worker started, waiting for logs...")
-
     while True:
         try:
             msgs = await psub.fetch(1, timeout=5)

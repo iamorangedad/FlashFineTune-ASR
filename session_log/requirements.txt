@@ -4,5 +4,4 @@ python-multipart
 nats-py
 boto3
 pymongo
-# 假设使用 faster-whisper 作为推理引擎 (按需修改)
-# faster-whisper
+faster-whisper

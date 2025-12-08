@@ -31,8 +31,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# 模拟 ASR 推理函数 (请替换为真实的 Whisper/Kaldi 调用)
 def run_inference(audio_bytes):
+    # TODO
     # import faster_whisper ...
     return "这是一个测试的语音转录结果", 0.98
 
@@ -42,10 +42,11 @@ async def transcribe(file: UploadFile):
     request_id = str(uuid.uuid4())
     start_time = time.time()
 
-    # 1. 读取音频 (注意内存，若文件过大需流式处理)
+    # 1. audio bytes data
+    # TODO
     audio_data = await file.read()
 
-    # 2. 执行推理 (GPU)
+    # 2. asr inference
     text, confidence = run_inference(audio_data)
 
     duration = time.time() - start_time
