@@ -4,6 +4,21 @@ metadata:
   name: asr-service
 ---
 # --- NATS JetStream ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-config
+  namespace: asr-service
+data:
+  nats.conf: |
+    # 核心配置：允许 10MB 的大包 (音频数据)
+    max_payload: 10MB
+    
+    # 开启 JetStream 并指定存储路径
+    jetstream {
+        store_dir: "/data"
+    }
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -20,13 +35,30 @@ spec:
       labels:
         app: nats
     spec:
+      nodeSelector: 
+        device: usbssd    
+      initContainers:
+      - name: fix-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 1000:1000 /data"]
+        volumeMounts:
+        - name: nats-storage
+          mountPath: /data    
       containers:
       - name: nats
         image: nats:2.10-alpine
-        # 关键配置：开启 JetStream，设置最大载荷为 10MB (适应音频传输)
-        args: ["-js", "--max-payload=10MB"] 
+        args: ["-c", "/etc/nats-config/nats.conf"] 
         ports:
         - containerPort: 4222
+        volumeMounts:
+        - name: nats-storage
+          mountPath: /data
+        - name: config-volume
+          mountPath: /etc/nats-config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: nats-config        
   volumeClaimTemplates:
   - metadata:
       name: nats-storage
