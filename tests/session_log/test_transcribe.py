@@ -62,7 +62,7 @@ def whisper_model():
     # 如果你在 Jetson 上，可以改为 device="cuda", compute_type="float16"
     # 为了保证单元测试的通用性，这里默认使用 cpu 和 int8
     model_size = "tiny"
-    model = WhisperModel(model_size, device="cuda", compute_type="float16")
+    model = WhisperModel(model_size, device="cpu", compute_type="int8")
     return model
 
 
