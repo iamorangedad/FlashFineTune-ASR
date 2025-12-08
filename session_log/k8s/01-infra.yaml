@@ -61,7 +61,7 @@ spec:
         app: mongo
     spec:
       nodeSelector: 
-        device: raspberrypi
+        device: usbssd
       containers:
       - name: mongo
         image: mongo:6.0
