@@ -61,7 +61,7 @@ spec:
         app: mongo
     spec:
       nodeSelector: 
-        device: ssd # 尽量放在 SSD 上
+        device: raspberrypi
       containers:
       - name: mongo
         image: mongo:6.0
@@ -75,7 +75,7 @@ spec:
       volumes:
       - name: mongo-data
         hostPath:
-          path: /mnt/ssd/mongo_data # 你的物理挂载路径
+          path: /data/mongo_data
           type: DirectoryOrCreate
 ---
 apiVersion: v1
@@ -88,52 +88,3 @@ spec:
   - port: 27017
   selector:
     app: mongo
----
-# --- MinIO ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: minio
-  namespace: asr-service
-spec:
-  selector:
-    matchLabels:
-      app: minio
-  template:
-    metadata:
-      labels:
-        app: minio
-    spec:
-      nodeSelector:
-        device: ssd # 必须放在 SSD 上
-      containers:
-      - name: minio
-        image: quay.io/minio/minio:RELEASE.2023-10-16T04-13-43Z
-        args: ["server", "/data", "--console-address", ":9001"]
-        env:
-        - name: MINIO_ROOT_USER
-          value: "admin"
-        - name: MINIO_ROOT_PASSWORD
-          value: "password123"
-        volumeMounts:
-        - name: storage
-          mountPath: /data
-      volumes:
-      - name: storage
-        hostPath:
-          path: /mnt/ssd/minio_data
-          type: DirectoryOrCreate
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: minio
-  namespace: asr-service
-spec:
-  ports:
-  - port: 9000
-    name: api
-  - port: 9001
-    name: console
-  selector:
-    app: minio
