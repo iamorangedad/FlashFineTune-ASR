@@ -142,6 +142,9 @@ def original_log_mel(mel_spec_input):
     return log_spec
 
 
+compiled_log_mel = torch.compile(original_log_mel)
+
+
 # =========================================================
 # Part 3: Correctness & Performance Test
 # =========================================================
@@ -174,6 +177,7 @@ def run_benchmark():
     # Warmup
     for _ in range(100):
         original_log_mel(mel_spec)
+        compiled_log_mel(mel_spec)
         fused_ops.optimized_log_mel(mel_spec)
 
     torch.cuda.synchronize()
@@ -189,6 +193,17 @@ def run_benchmark():
     torch.cuda.synchronize()
     time_torch = start.elapsed_time(end) / 1000.0  # ms
 
+    # Test Compiled
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+
+    start.record()
+    for _ in range(1000):
+        compiled_log_mel(mel_spec)
+    end.record()
+    torch.cuda.synchronize()
+    time_compiled = start.elapsed_time(end) / 1000.0  # ms
+
     # Test Custom CUDA
     start.record()
     for _ in range(1000):
@@ -198,6 +213,15 @@ def run_benchmark():
     time_cuda = start.elapsed_time(end) / 1000.0  # ms
 
     print(f"{'Implementation':<20} | {'Avg Latency (ms)':<15} | {'FPS (Approx)':<15}")
+    print("-" * 60)
+    print(
+        f"{'Original PyTorch':<20} | {time_torch:.4f} ms        | {1000/time_torch:.1f}"
+    )
+    print(
+        f"{'Compiled CUDA':<20} | {time_compiled:.4f} ms        | {1000/time_compiled:.1f}"
+    )
+    print("-" * 60)
+    print(f"🚀 Speedup: {time_torch / time_compiled:.2f}x")
     print("-" * 60)
     print(
         f"{'Original PyTorch':<20} | {time_torch:.4f} ms        | {1000/time_torch:.1f}"
