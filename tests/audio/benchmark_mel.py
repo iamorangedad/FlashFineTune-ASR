@@ -142,7 +142,7 @@ def original_log_mel(mel_spec_input):
     return log_spec
 
 
-compiled_log_mel = torch.compile(original_log_mel)
+compiled_log_mel = torch.compile(original_log_mel, backend="cudagraphs")
 
 
 # =========================================================
