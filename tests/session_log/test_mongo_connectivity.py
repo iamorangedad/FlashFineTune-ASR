@@ -13,7 +13,7 @@ def mongo_uri():
     获取连接地址。
     优先读取环境变量 MONGO_URI，如果没有则默认为 localhost (用于 port-forward 测试)
     """
-    return os.getenv("MONGO_URI", "http://10.0.0.27:27017")
+    return os.getenv("MONGO_URI", "mongodb://10.0.0.27:27017")
 
 
 @pytest.fixture(scope="module")
