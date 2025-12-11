@@ -9,12 +9,7 @@ spec:
   containers:
     - name: python
       image: python:3.10-slim
-      command: ["/bin/sh", "-c"] 
-      args:
-        - |
-          set -e
-          pip install --no-cache-dir unicorn python-multipart nats-py boto3 pymongo 
-          sleep infinity      
+      command: ["sleep", "infinity"]  
       workingDir: /app
       ports:
         - containerPort: 8000
