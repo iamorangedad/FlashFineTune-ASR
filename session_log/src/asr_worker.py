@@ -8,10 +8,13 @@ import nats
 from nats.errors import TimeoutError
 from faster_whisper import WhisperModel
 from config import Config
+from logger import setup_logger
 
 
 DEVICE = os.getenv("ASR_DEVICE", "cuda")
 COMPUTE_TYPE = os.getenv("ASR_COMPUTE_TYPE", "float16")
+
+logger = setup_logger("asr-worker")
 
 
 class ASRWorker:
@@ -60,7 +63,7 @@ class ASRWorker:
             req_id = payload.get("req_id", "unknown")
             session_id = payload.get("session_id", "unknown")
 
-            # print(f"📥 Processing Req: {req_id} (Session: {session_id})")
+            logger.info(f"Start inference", extra={"req_id": req_id})
             start_time = time.time()
 
             # 1. 解码音频 (Base64 -> Float32 Numpy)
@@ -79,6 +82,7 @@ class ASRWorker:
             )
 
             latency = round(time.time() - start_time, 3)
+            logger.info(f"Inference done", extra={"req_id": req_id, "latency": latency})
 
             # 4. 如果有识别结果，发布到输出队列
             if new_text.strip():
