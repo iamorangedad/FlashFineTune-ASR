@@ -55,13 +55,14 @@ async def process_msg(msg):
 async def main():
     nc = await nats.connect(Config.NATS_URL)
     js = nc.jetstream()
-    # 创建 Stream (幂等)
+    stream_name = "ASR_INFERENCE"
     try:
-        await js.add_stream(name="ASR_LOGS", subjects=["asr.logs.*"])
-    except:
-        pass
+        await js.add_stream(name=stream_name, subjects=[Config.LOG_SUBJECT])
+    except Exception as e:
+        print(f"⚠️ Warning during stream creation (might already exist): {e}")
     # 持久化订阅
-    psub = await js.pull_subscribe("asr.logs.new", durable="worker_grp_1")
+    durable_name = "asr_log_processor"
+    psub = await js.pull_subscribe(Config.LOG_SUBJECT, durable=durable_name)
     print("🚀 Worker started, waiting for logs...")
     while True:
         try:
@@ -71,7 +72,7 @@ async def main():
         except nats.errors.TimeoutError:
             continue
         except Exception as e:
-            print(e)
+            print(f"❌ NATS Error: {e}")
             await asyncio.sleep(1)
 
 
