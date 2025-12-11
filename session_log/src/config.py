@@ -11,7 +11,7 @@ class Config:
     WS_URL = f"ws://127.0.0.1:{API_PORT}/ws/realtime"
 
     # NATS
-    NATS_URL = os.getenv("NATS_URL", "http://10.0.0.27:30742")
+    NATS_URL = os.getenv("NATS_URL", "nats://10.0.0.27:30742")
     LOG_SUBJECT = "asr.inference.stream"
 
     # MongoDB
