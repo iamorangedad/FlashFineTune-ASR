@@ -2,23 +2,34 @@ import os
 
 
 class Config:
-    # ASR service
+    # --- Gateway Service (服务端监听配置) ---
     API_HOST = "0.0.0.0"
-    API_PORT = 8000
-    API_URL = f"http://127.0.0.1:{API_PORT}/transcribe"
+    API_PORT = 8000  # 容器内部端口
 
-    # websocket
-    WS_URL = f"ws://127.0.0.1:{API_PORT}/ws/realtime"
+    # --- Client Connection (前端连接配置) ---
+    # 对应 K8s YAML 中定义的 NodePort (30080)
+    # 如果你是本地运行 Gateway 且没用 K8s，可以改回 8000
+    WS_URL = os.getenv("WS_URL", "ws://10.0.0.27:30080/ws/realtime")
 
-    # NATS
+    # --- NATS Connection (消息总线) ---
+    # 10.0.0.27 是你的宿主机/Master节点 IP
     NATS_URL = os.getenv("NATS_URL", "nats://10.0.0.27:30742")
-    LOG_SUBJECT = "asr.inference.stream"
 
-    # MongoDB
+    # --- NATS Subjects (关键修改：读写分离) ---
+    # 1. 输入流: Gateway -> ASR Worker (发送音频片段)
+    SUBJECT_INPUT = "asr.input"
+
+    # 2. 输出流: ASR Worker -> Gateway & Storage (发送识别结果)
+    SUBJECT_OUTPUT = "asr.output"
+
+    # 3. 归档流: Storage Worker 监听的目标 (现在改为监听输出流)
+    LOG_SUBJECT = SUBJECT_OUTPUT
+
+    # --- MongoDB (元数据存储) ---
     MONGO_URI = os.getenv("MONGO_URI", "mongodb://10.0.0.27:30327")
     MONGO_DB = "asr_data"
 
-    # MinIO (S3)
+    # --- MinIO/S3 (音频文件存储) ---
     S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://10.0.0.27:39001")
     S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "admin")
     S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "password123")
