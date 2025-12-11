@@ -5,7 +5,7 @@ import nats
 import boto3
 from pymongo import MongoClient
 from io import BytesIO
-from .config import Config
+from config import Config
 
 # 初始化 S3 客户端
 s3 = boto3.client(
