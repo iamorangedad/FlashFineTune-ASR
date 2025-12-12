@@ -1,76 +1,163 @@
-# --- ASR Inference API (Jetson) ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: asr-config
+  namespace: default
+data:
+  # 基础设施连接信息 (请修改为你的真实 IP)
+  NATS_URL: "nats://10.0.0.27:30742"   # 注意使用 NodePort 或 ClusterIP
+  MONGO_URI: "mongodb://10.0.0.27:30327"
+  MONGO_DB: "asr_data"
+  
+  # MinIO / S3 配置
+  S3_ENDPOINT: "http://10.0.0.27:39001"
+  S3_ACCESS_KEY: "admin"
+  S3_SECRET_KEY: "password123"
+  S3_BUCKET: "audio"
+  
+  # ASR 配置
+  LOG_SUBJECT: "asr.inference.stream"
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: asr-api
-  namespace: asr-service
+  name: asr-gateway
+  labels:
+    app: asr-gateway
 spec:
-  replicas: 1
+  replicas: 1  # 生产环境建议 2+
   selector:
     matchLabels:
-      app: asr-api
+      app: asr-gateway
   template:
     metadata:
       labels:
-        app: asr-api
+        app: asr-gateway
     spec:
-      nodeSelector:
-        device: gpu # 强制调度到 Jetson
-      runtimeClassName: nvidia # 启用 GPU Runtime
+      nodeName: raspberrypi
       containers:
-      - name: api
-        image: my-asr-logger:latest # 你构建的镜像
-        command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
-        resources:
-          limits:
-            nvidia.com/gpu: 1
-        env:
-        - name: NATS_URL
-          value: "nats://nats:4222"
+        - name: gateway
+          image: flash-asr:1.0
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "src.gateway:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: asr-config
+          # 挂载代码目录 (开发阶段方便，生产建议打包进镜像)
+          volumeMounts:
+            - mountPath: /app
+              name: code-volume
+      volumes:
+        - name: code-volume
+          hostPath:
+            path: /home/mac/FlashFineTune-ASR/session_log
+            type: Directory
 ---
+# 网关的 Service (NodePort)
 apiVersion: v1
 kind: Service
 metadata:
-  name: asr-api
-  namespace: asr-service
+  name: asr-gateway-svc
 spec:
-  type: LoadBalancer
-  ports:
-  - port: 80
-    targetPort: 8000
+  type: NodePort
   selector:
-    app: asr-api
-
+    app: asr-gateway
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      nodePort: 30081 
 ---
-# --- Log Worker (Raspberry Pi) ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: log-worker
-  namespace: asr-service
+  name: asr-storage
+  labels:
+    app: asr-storage
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: log-worker
+      app: asr-storage
   template:
     metadata:
       labels:
-        app: log-worker
+        app: asr-storage
     spec:
-      # 不强制节点，哪里有空闲 CPU 去哪里，通常是 RPi
+      nodeName: raspberrypi
       containers:
-      - name: worker
-        image: my-asr-logger:latest
-        command: ["python", "-m", "src.worker"] # 启动 Worker
-        env:
-        - name: NATS_URL
-          value: "nats://nats:4222"
-        - name: S3_ENDPOINT
-          value: "http://minio:9000"
-        - name: S3_ACCESS_KEY
-          value: "admin"
-        - name: S3_SECRET_KEY
-          value: "password123"
-        - name: MONGO_URI
-          value: "mongodb://mongo:27017"
+        - name: storage
+          image: flash-asr:1.0
+          imagePullPolicy: IfNotPresent
+          # 覆盖启动命令，运行存储脚本
+          command: ["python", "-m", "src.storage_worker"]
+          envFrom:
+            - configMapRef:
+                name: asr-config
+          volumeMounts:
+            - mountPath: /app
+              name: code-volume
+      volumes:
+        - name: code-volume
+          hostPath:
+            path: /home/mac/FlashFineTune-ASR/session_log
+            type: Directory
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asr-worker
+  labels:
+    app: asr-worker
+spec:
+  replicas: 1 # 根据 Jetson 显存决定，Orin Nano 通常跑 1 个
+  selector:
+    matchLabels:
+      app: asr-worker
+  template:
+    metadata:
+      labels:
+        app: asr-worker
+    spec:
+      nodeName: ubuntu 
+      
+      # 如果你在用标准的 k8s-device-plugin，可能需要 runtimeClassName
+      # runtimeClassName: nvidia 
+      
+      containers:
+        - name: worker
+          image: flash-asr:1.0
+          imagePullPolicy: IfNotPresent
+          # 覆盖启动命令，运行推理脚本
+          command: ["python", "-m", "src.asr_worker"]
+          
+          # 专门针对 GPU 的环境变量
+          env:
+            - name: ASR_DEVICE
+              value: "cpu"
+            - name: ASR_COMPUTE_TYPE
+              value: "int8"
+          envFrom:
+            - configMapRef:
+                name: asr-config
+          
+          # 资源限制 (可选，帮助调度器)
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              
+          volumeMounts:
+            - mountPath: /app
+              name: code-volume
+      volumes:
+        - name: code-volume
+          hostPath:
+            # 注意：这是 Jetson 节点上的路径，确保该路径存在代码！
+            # 如果 Jetson 上没有代码，你需要先 SCP 过去，或者打进镜像里
+            path: /home/jetson/FlashFineTune-ASR/session_log/
+            type: Directory   
+---
+            
