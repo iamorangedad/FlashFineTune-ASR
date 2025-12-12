@@ -129,7 +129,7 @@ spec:
       
       containers:
         - name: worker
-          image: faster-whisper-cuda:1.1
+          image: faster-whisper-cuda:1.2
           imagePullPolicy: IfNotPresent
           # 覆盖启动命令，运行推理脚本
           command: ["python", "-m", "src.asr_worker"]          
