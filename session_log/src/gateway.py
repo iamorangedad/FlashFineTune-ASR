@@ -99,7 +99,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-# --- WebSocket 路由 (收音频) ---
 @app.websocket("/ws/realtime")
 async def websocket_endpoint(websocket: WebSocket):
     # 为每个连接生成唯一的 Session ID
@@ -160,5 +159,4 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
 
-    # 启动 Gateway，监听 8000 端口
     uvicorn.run(app, host=Config.API_HOST, port=Config.API_PORT)
