@@ -5,8 +5,11 @@ import json
 import threading
 import queue
 import time
-from scipy import signal  # 用于重采样
+from scipy import signal
+import os
 from config import Config
+
+WS_URL = getattr(Config, "WS_URL", "ws://10.0.0.27:30081/ws/realtime")
 
 
 class RealtimeClient:
@@ -14,124 +17,183 @@ class RealtimeClient:
         self.ws = None
         self.recv_queue = queue.Queue()
         self.full_text = ""
+        self.latency_info = "Latency: N/A"
         self.connected = False
-        self.lock = threading.Lock()
+        self.running = False
 
     def connect(self):
+        if self.connected:
+            return
         try:
-            self.ws = websocket.create_connection(Config.WS_URL)
+            self.ws = websocket.create_connection(WS_URL, timeout=5)
             self.connected = True
+            self.running = True
             threading.Thread(target=self._recv_loop, daemon=True).start()
-            print("Websocket connected")
+            print("✅ Websocket connected")
         except Exception as e:
-            print(f"Connection failed: {e}")
+            print(f"❌ Connection failed: {e}")
+            self.connected = False
 
     def _recv_loop(self):
-        while self.connected:
+        while self.running and self.connected:
             try:
+                # 设置超时以便线程能响应关闭信号
+                self.ws.settimeout(1)
                 msg = self.ws.recv()
                 data = json.loads(msg)
                 self.recv_queue.put(data)
-                if data.get("type") == "finish":
-                    break
-            except:
+            except websocket.WebSocketTimeoutException:
+                continue
+            except Exception as e:
+                print(f"Websocket read error: {e}")
+                self.connected = False
                 break
 
     def send_audio_chunk(self, sr, data):
         if not self.connected or self.ws is None:
             return
 
-        # --- 音频预处理关键步骤 ---
-        # 1. 重采样: Gradio 可能给 44100Hz or 48000Hz, Whisper 需要 16000Hz
-        if sr != 16000:
-            # 计算重采样后的点数
-            num_samples = int(len(data) * 16000 / sr)
+        # --- 1. 立体声转单声道 (关键) ---
+        # Gradio 有时会给 (N, 2) 的数据
+        if len(data.shape) > 1:
+            data = np.mean(data, axis=1)
+
+        # --- 2. 重采样 (44100/48000 -> 16000) ---
+        target_sr = 16000
+        if sr != target_sr:
+            num_samples = int(len(data) * target_sr / sr)
+            # resample 返回的是 float64
             data = signal.resample(data, num_samples)
 
-        # 2. 类型转换: Float32 -> Int16 PCM
-        # Gradio 输出通常是 float32 (-1.0 ~ 1.0)
-        # 我们转换为 int16 发送给后端以节省网络带宽 (byte流)
-        if data.dtype != np.int16:
-            data = (data * 32767).astype(np.int16)
+        # --- 3. 类型转换 (Float -> Int16) ---
+        # 确保数据在 -1.0 到 1.0 之间
+        max_val = np.abs(data).max()
+        if max_val > 0:
+            # 简单的归一化，防止爆音 (可选)
+            # data = data / max_val
+            pass
+
+        # 转换为 Int16 PCM
+        data_int16 = (data * 32767).astype(np.int16)
 
         try:
-            self.ws.send_binary(data.tobytes())
+            self.ws.send_binary(data_int16.tobytes())
         except Exception as e:
             print(f"Send error: {e}")
+            self.connected = False
 
     def close(self):
+        self.running = False
         self.connected = False
         if self.ws:
             try:
-                self.ws.send("EOF")
                 self.ws.close()
             except:
                 pass
+        print("🔌 Websocket closed")
+
+    def clear_text(self):
+        self.full_text = ""
+        self.latency_info = "Latency: N/A"
 
 
-# Session 管理
+# --- Session 管理 ---
 clients = {}
+
+
+def get_client(session_hash):
+    if session_hash not in clients:
+        clients[session_hash] = RealtimeClient()
+    return clients[session_hash]
 
 
 def process_stream(audio, current_text, request: gr.Request):
     if audio is None:
-        return current_text
+        return current_text, "Ready"
 
-    uid = request.session_hash
-    if uid not in clients:
-        clients[uid] = RealtimeClient()
-        clients[uid].connect()
+    client = get_client(request.session_hash)
 
-    client = clients[uid]
+    # 确保连接
+    if not client.connected:
+        client.connect()
+
     sr, y = audio
 
-    # 发送音频
+    # 1. 发送音频数据
     client.send_audio_chunk(sr, y)
 
-    # 接收文本更新
+    # 2. 处理接收队列 (非阻塞)
     try:
         while not client.recv_queue.empty():
             msg = client.recv_queue.get_nowait()
-            if msg["type"] == "update":
-                # 服务端返回的是增量文本，我们拼接到总文本后
-                # 注意：实际生产中可能需要处理重复词，这里简化为直接拼接
-                client.full_text += msg["text"]
-    except:
+
+            if msg.get("type") == "update":
+                # 拼接文本
+                text_chunk = msg.get("text", "")
+                latency = msg.get("latency", 0)
+
+                client.full_text += text_chunk
+                client.latency_info = f"Latency: {latency:.3f}s"
+
+    except Exception:
         pass
 
-    return client.full_text
+    return client.full_text, client.latency_info
 
 
-def on_stop_recording(request: gr.Request):
+def on_clear(request: gr.Request):
+    client = get_client(request.session_hash)
+    client.clear_text()
+    return "", "Latency: N/A"
+
+
+def on_stop(request: gr.Request):
+    """当停止录音或关闭页面时触发"""
     uid = request.session_hash
     if uid in clients:
         clients[uid].close()
-        del clients[uid]
+        # 这里不一定要 del，因为用户可能马上又要录，保持连接池也可以
+        # del clients[uid]
 
 
-with gr.Blocks(title="Whisper Realtime") as demo:
-    gr.Markdown("### 🚀 Faster-Whisper 实时流式推理")
+# --- UI 构建 ---
+with gr.Blocks(title="ASR Realtime Client") as demo:
+    gr.Markdown("### 🎙️ Distributed ASR Realtime Client")
+    gr.Markdown(f"Connecting to: `{WS_URL}`")
 
     with gr.Row():
-        input_audio = gr.Audio(
-            sources=["microphone"],
-            streaming=True,
-            type="numpy",  # 获取原始数据自行处理
-            label="Speak Here",
-        )
-        output_display = gr.Textbox(label="Result", lines=8)
+        with gr.Column(scale=1):
+            input_audio = gr.Audio(
+                sources=["microphone"],
+                streaming=True,
+                type="numpy",
+                label="Microphone Input",
+            )
+            clear_btn = gr.Button("Clear Text & Reset")
+            latency_display = gr.Label(value="Latency: N/A", label="System Metrics")
 
-    # 这里的 state 其实没用到，因为我们用 class 管理了状态，但保留以防万一
-    state = gr.State()
+        with gr.Column(scale=2):
+            output_display = gr.Textbox(
+                label="Recognized Text",
+                lines=10,
+                placeholder="Start speaking...",
+                interactive=False,
+            )
 
-    input_audio.stream(
+    # 事件绑定
+    stream_event = input_audio.stream(
         fn=process_stream,
         inputs=[input_audio, output_display],
-        outputs=[output_display],
+        outputs=[output_display, latency_display],
         show_progress=False,
     )
 
-    input_audio.clear(fn=on_stop_recording)
+    # 停止录音时断开连接 (可选，或者保持连接)
+    # input_audio.stop_recording(fn=on_stop)
+
+    # 清除按钮
+    clear_btn.click(fn=on_clear, inputs=[], outputs=[output_display, latency_display])
 
 if __name__ == "__main__":
+    # 允许局域网访问
     demo.queue().launch(server_name="0.0.0.0", server_port=7860)
