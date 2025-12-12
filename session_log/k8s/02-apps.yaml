@@ -35,13 +35,11 @@ spec:
       labels:
         app: asr-gateway
     spec:
-      # 指定运行在树莓派上 (可选，不写则随机调度)
       nodeName: raspberrypi
       containers:
         - name: gateway
-          image: flash-asr:latest
+          image: flash-asr:1.0
           imagePullPolicy: IfNotPresent
-          # 覆盖启动命令，只运行网关
           command: ["uvicorn", "src.gateway:app", "--host", "0.0.0.0", "--port", "8000"]
           ports:
             - containerPort: 8000
@@ -55,9 +53,9 @@ spec:
       volumes:
         - name: code-volume
           hostPath:
-            path: /home/mac/FlashFineTune-ASR
+            path: /home/mac/FlashFineTune-ASR/session_log
             type: Directory
-
+---
 # 网关的 Service (NodePort)
 apiVersion: v1
 kind: Service
@@ -71,7 +69,7 @@ spec:
     - protocol: TCP
       port: 8000
       targetPort: 8000
-      nodePort: 30080  # 固定对外端口，方便前端连接
+      nodePort: 30081 
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -92,7 +90,7 @@ spec:
       nodeName: raspberrypi
       containers:
         - name: storage
-          image: flash-asr:latest
+          image: flash-asr:1.0
           imagePullPolicy: IfNotPresent
           # 覆盖启动命令，运行存储脚本
           command: ["python", "-m", "src.storage_worker"]
@@ -105,7 +103,7 @@ spec:
       volumes:
         - name: code-volume
           hostPath:
-            path: /home/mac/FlashFineTune-ASR
+            path: /home/mac/FlashFineTune-ASR/session_log
             type: Directory
 ---
 apiVersion: apps/v1
@@ -131,7 +129,7 @@ spec:
       
       containers:
         - name: worker
-          image: flash-asr:latest
+          image: flash-asr:1.0
           imagePullPolicy: IfNotPresent
           # 覆盖启动命令，运行推理脚本
           command: ["python", "-m", "src.asr_worker"]
@@ -139,9 +137,9 @@ spec:
           # 专门针对 GPU 的环境变量
           env:
             - name: ASR_DEVICE
-              value: "cuda"
+              value: "cpu"
             - name: ASR_COMPUTE_TYPE
-              value: "float16"
+              value: "int8"
           envFrom:
             - configMapRef:
                 name: asr-config
@@ -159,7 +157,7 @@ spec:
           hostPath:
             # 注意：这是 Jetson 节点上的路径，确保该路径存在代码！
             # 如果 Jetson 上没有代码，你需要先 SCP 过去，或者打进镜像里
-            path: /home/jetson/FlashFineTune-ASR
+            path: /home/jetson/FlashFineTune-ASR/session_log/
             type: Directory   
 ---
             
