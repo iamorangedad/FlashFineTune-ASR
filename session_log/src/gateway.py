@@ -7,7 +7,7 @@ import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from contextlib import asynccontextmanager
 import nats
-from config import Config
+from src.config import Config
 
 
 # --- 会话管理器 ---
