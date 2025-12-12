@@ -3,7 +3,6 @@ import json
 import base64
 import time
 import uuid
-import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from contextlib import asynccontextmanager
 import nats
