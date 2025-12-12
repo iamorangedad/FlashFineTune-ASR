@@ -7,9 +7,9 @@ class Config:
     API_PORT = 8000  # 容器内部端口
 
     # --- Client Connection (前端连接配置) ---
-    # 对应 K8s YAML 中定义的 NodePort (30080)
+    # 对应 K8s YAML 中定义的 NodePort (30081)
     # 如果你是本地运行 Gateway 且没用 K8s，可以改回 8000
-    WS_URL = os.getenv("WS_URL", "ws://10.0.0.27:30080/ws/realtime")
+    WS_URL = os.getenv("WS_URL", "ws://10.0.0.27:30081/ws/realtime")
 
     # --- NATS Connection (消息总线) ---
     # 10.0.0.27 是你的宿主机/Master节点 IP
