@@ -7,7 +7,7 @@ import numpy as np
 import nats
 from nats.errors import TimeoutError
 from faster_whisper import WhisperModel
-from logger import setup_logger
+from src.logger import setup_logger
 from src.config import Config
 
 DEVICE = os.getenv("ASR_DEVICE", "cuda")
