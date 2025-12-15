@@ -129,17 +129,16 @@ spec:
       
       containers:
         - name: worker
-          image: flash-asr:1.0
+          image: faster-whisper-cuda:1.2
           imagePullPolicy: IfNotPresent
           # 覆盖启动命令，运行推理脚本
-          command: ["python", "-m", "src.asr_worker"]
-          
+          command: ["python", "-m", "src.asr_worker"]          
           # 专门针对 GPU 的环境变量
           env:
             - name: ASR_DEVICE
-              value: "cpu"
+              value: "cuda"
             - name: ASR_COMPUTE_TYPE
-              value: "int8"
+              value: "float16"
           envFrom:
             - configMapRef:
                 name: asr-config
