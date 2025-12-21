@@ -1,4 +1,4 @@
-# sudo jetson_clocks
+sudo jetson_clocks
 
 sudo nsys profile \
   -t nvtx,cuda,osrt,cudnn,cublas \
