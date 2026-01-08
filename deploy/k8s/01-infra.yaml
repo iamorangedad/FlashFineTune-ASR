@@ -72,8 +72,10 @@ metadata:
   name: nats
   namespace: asr-service
 spec:
+  type: NodePort
   ports:
   - port: 4222
+    nodePort: 30742
   selector:
     app: nats
 ---
@@ -116,7 +118,9 @@ metadata:
   name: mongo
   namespace: asr-service
 spec:
+  type: NodePort
   ports:
   - port: 27017
+    nodePort: 30327
   selector:
     app: mongo
