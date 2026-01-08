@@ -39,16 +39,15 @@ def create_dummy_wav(filename, duration_sec=2):
 @pytest.fixture(scope="module")
 def audio_file():
     """
-    创建一个临时 wav 文件，测试结束后自动删除。
+    使用真实的音频文件进行测试，而不是人工生成的正弦波。
+    Whisper模型无法识别非语音信号（如纯音调）。
     """
-    filename = "test_beep.wav"
-    create_dummy_wav(filename)
+    # 使用项目中的真实音频文件
+    filename = "tests/california.mp3"
+    if not os.path.exists(filename):
+        pytest.skip(f"Test audio file not found: {filename}")
 
     yield filename
-
-    # Teardown: 删除文件
-    if os.path.exists(filename):
-        os.remove(filename)
 
 
 @pytest.fixture(scope="module")
