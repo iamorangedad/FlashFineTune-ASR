@@ -53,7 +53,7 @@ spec:
       volumes:
         - name: code-volume
           hostPath:
-            path: /home/mac/FlashFineTune-ASR/session_log
+            path: /home/mac/FlashFineTune-ASR
             type: Directory
 ---
 # 网关的 Service (NodePort)
@@ -103,7 +103,7 @@ spec:
       volumes:
         - name: code-volume
           hostPath:
-            path: /home/mac/FlashFineTune-ASR/session_log
+            path: /home/mac/FlashFineTune-ASR
             type: Directory
 ---
 apiVersion: apps/v1
@@ -156,7 +156,7 @@ spec:
           hostPath:
             # 注意：这是 Jetson 节点上的路径，确保该路径存在代码！
             # 如果 Jetson 上没有代码，你需要先 SCP 过去，或者打进镜像里
-            path: /home/jetson/FlashFineTune-ASR/session_log/
+            path: /home/jetson/FlashFineTune-ASR
             type: Directory   
 ---
             
