@@ -2,3 +2,4 @@
 tips.txt
 *.drawio
 *.drawio.bkp
+tmp/*
