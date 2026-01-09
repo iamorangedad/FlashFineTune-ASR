@@ -38,7 +38,7 @@ class StorageWorker:
             self.s3.list_buckets()
             print("✅ [Storage] MinIO connected.")
         except Exception as e:
-            print(f"❌ [Storage] MinIO connection failed: {e}", exc_info=True)
+            print(f"❌ [Storage] MinIO connection failed: {e}")
             # In production, you might want to exit: exit(1)
 
         # 2. MongoDB
@@ -53,7 +53,7 @@ class StorageWorker:
             self.collection = db["transcriptions"]
             print("✅ [Storage] MongoDB connected.")
         except Exception as e:
-            print(f"❌ [Storage] MongoDB connection failed: {e}", exc_info=True)
+            print(f"❌ [Storage] MongoDB connection failed: {e}")
 
     async def process_msg(self, msg):
         """
