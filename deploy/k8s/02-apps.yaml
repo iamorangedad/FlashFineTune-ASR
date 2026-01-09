@@ -180,10 +180,13 @@ spec:
       nodeName: raspberrypi
       containers:
         - name: web-ui
-          image: flash-asr:1.0
+          image: flash-asr:1.1
           imagePullPolicy: IfNotPresent
           # Assuming you saved the code as src/web_ui.py
           command: ["python", "-m", "src.web_ui"]
+          env:
+            - name: PYTHONPATH
+              value: "/app/src"          
           ports:
             - containerPort: 7860
           envFrom:
