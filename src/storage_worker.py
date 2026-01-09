@@ -134,7 +134,7 @@ class StorageWorker:
         self.init_resources()
 
         # 2. Connect to NATS
-        logger.info(f"🔌 [Storage] Connecting to NATS: {Config.NATS_URL}")
+        print(f"🔌 [Storage] Connecting to NATS: {Config.NATS_URL}")
         try:
             self.nc = await nats.connect(Config.NATS_URL)
             self.js = self.nc.jetstream()
@@ -145,7 +145,7 @@ class StorageWorker:
             except Exception:
                 pass
 
-            logger.info("🚀 Storage Worker started, listening to 'asr.output'...")
+            print("🚀 Storage Worker started, listening to 'asr.output'...")
 
             # 3. Subscribe with Queue Group
             await self.js.subscribe(
