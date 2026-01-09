@@ -179,7 +179,7 @@ class ASRWorker:
 
     async def start(self):
         self.load_model()
-        logger.info(f"🔌 Connecting to NATS: {Config.NATS_URL}")
+        print(f"🔌 Connecting to NATS: {Config.NATS_URL}")
 
         try:
             self.nc = await nats.connect(Config.NATS_URL)
