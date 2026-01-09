@@ -5,11 +5,11 @@ import uuid
 from botocore.client import Config
 from io import BytesIO
 
-# --- 配置部分 ---
-# 你可以修改这里，或者通过环境变量传入
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://10.0.0.27:30091")
-ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")  # 请替换为你的实际账号
-SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "password123")  # 请替换为你的实际密码
+
+S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://10.0.0.27:30091")
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "admin")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "password123")
+S3_BUCKET = "audio"
 
 
 @pytest.fixture(scope="module")
@@ -19,9 +19,9 @@ def s3_client():
     """
     client = boto3.client(
         "s3",
-        endpoint_url=MINIO_ENDPOINT,
-        aws_access_key_id=ACCESS_KEY,
-        aws_secret_access_key=SECRET_KEY,
+        endpoint_url=S3_ENDPOINT,
+        aws_access_key_id=S3_ACCESS_KEY,
+        aws_secret_access_key=S3_SECRET_KEY,
         config=Config(signature_version="s3v4"),
         region_name="us-east-1",  # MinIO 默认忽略区域，但 boto3 需要填一个
     )
