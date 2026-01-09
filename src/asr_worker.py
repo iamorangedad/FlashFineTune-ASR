@@ -12,8 +12,6 @@ from src.config import Config
 
 DEVICE = os.getenv("ASR_DEVICE", "cuda")
 COMPUTE_TYPE = os.getenv("ASR_COMPUTE_TYPE", "float16")
-# FORCE DEBUG SAVE ON
-DEBUG_SAVE_AUDIO = True
 
 logger = setup_logger("asr-worker")
 
@@ -34,24 +32,6 @@ class ASRWorker:
         except Exception as e:
             logger.critical(f"❌ [ASR Worker] CRITICAL: Model load failed - {e}")
             exit(1)
-
-    def save_debug_wav(self, req_id, audio_int16, label="received"):
-        """Save audio to disk to listen to what the model actually heard"""
-        if not DEBUG_SAVE_AUDIO:
-            return
-
-        filename = f"/tmp/debug_3_worker_{label}_{req_id}.wav"
-        try:
-            with wave.open(filename, "wb") as wav_file:
-                wav_file.setnchannels(1)
-                wav_file.setsampwidth(2)  # 16-bit
-                wav_file.setframerate(16000)
-                wav_file.writeframes(audio_int16.tobytes())
-            logger.warning(
-                f"💾 Saved debug audio to {filename}", extra={"req_id": req_id}
-            )
-        except Exception as e:
-            logger.error(f"Failed to save debug wav: {e}")
 
     def run_inference(self, audio_np, previous_text="", req_id="N/A"):
         if not self.model:
@@ -103,32 +83,19 @@ class ASRWorker:
             payload = json.loads(msg.data.decode())
             req_id = payload.get("req_id", "unknown")
             session_id = payload.get("session_id", "unknown")
-
             start_time = time.time()
-
             # 1. Decode Audio
             audio_bytes = base64.b64decode(payload["audio_b64"])
             audio_int16 = np.frombuffer(audio_bytes, dtype=np.int16)
-
-            # --- DEBUG SAVE POINT 3: Worker Received ---
-            # Save immediately to prove data arrived at Worker intact
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None, self.save_debug_wav, req_id, audio_int16, "in"
-            )
-            # -------------------------------------------
-
             audio_float32 = audio_int16.astype(np.float32) / 32768.0
             previous_text = payload.get("previous_text", "")
-
-            # 3. Inference
+            # 2. Inference
+            loop = asyncio.get_running_loop()
             new_text = await loop.run_in_executor(
                 None, self.run_inference, audio_float32, previous_text, req_id
             )
-
             latency = round(time.time() - start_time, 3)
-
-            # 4. Handle Result
+            # 3. Handle Result
             if new_text.strip():
                 logger.info(
                     f"✅ Result: '{new_text}'",
