@@ -55,6 +55,16 @@ class StorageWorker:
         except Exception as e:
             print(f"❌ [Storage] MongoDB connection failed: {e}")
 
+    def add_wav_header(self, pcm_bytes):
+        """Wraps raw PCM bytes into a valid WAV file in memory"""
+        with BytesIO() as wav_buffer:
+            with wave.open(wav_buffer, "wb") as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit (2 bytes)
+                wav_file.setframerate(16000)  # 16kHz
+                wav_file.writeframes(pcm_bytes)
+            return wav_buffer.getvalue()
+
     async def process_msg(self, msg):
         """
         Handle messages from 'asr.output'
@@ -78,7 +88,10 @@ class StorageWorker:
             if "audio_b64" in data and data["audio_b64"] and self.s3:
                 try:
                     # Base64 -> Bytes
-                    audio_bytes = base64.b64decode(data["audio_b64"])
+                    raw_pcm_bytes = base64.b64decode(data["audio_b64"])
+
+                    # Add wav header
+                    wav_bytes = self.add_wav_header(raw_pcm_bytes)
 
                     # Path: yyyy/mm/dd/session_id/req_id.wav
                     date_prefix = time.strftime("%Y/%m/%d")
@@ -86,7 +99,7 @@ class StorageWorker:
 
                     # Upload
                     self.s3.upload_fileobj(
-                        BytesIO(audio_bytes),
+                        BytesIO(wav_bytes),
                         Config.S3_BUCKET,
                         s3_key,
                         ExtraArgs={"ContentType": "audio/wav"},
