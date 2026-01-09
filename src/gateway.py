@@ -108,11 +108,11 @@ async def handle_asr_result(msg):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. 连接 NATS
-    logger.info(f"🔌 [Gateway] Connecting to NATS: {Config.NATS_URL} ...")
+    print(f"🔌 [Gateway] Connecting to NATS: {Config.NATS_URL} ...")
     try:
         server_state["nc"] = await nats.connect(Config.NATS_URL)
         server_state["js"] = server_state["nc"].jetstream()
-        logger.info("✅ [Gateway] NATS Connected successfully")
+        print("✅ [Gateway] NATS Connected successfully")
 
         # 2. 订阅 ASR 结果
         # 注意：Gateway 是广播接收，需要根据 session_id 自己做路由
@@ -121,14 +121,14 @@ async def lifespan(app: FastAPI):
             cb=handle_asr_result,
             durable="gateway_router",  # 保证断连后能收到离线消息(可选)
         )
-        logger.info("✅ [Gateway] Listening for 'asr.output'...")
+        print("✅ [Gateway] Listening for 'asr.output'...")
     except Exception as e:
-        logger.critical(f"❌ [Gateway] NATS Connection Failed: {e}", exc_info=True)
+        print(f"❌ [Gateway] NATS Connection Failed: {e}", exc_info=True)
         # In production you might want to exit here, but for now we yield
 
     yield
 
-    logger.info("🛑 [Gateway] Shutting down...")
+    print("🛑 [Gateway] Shutting down...")
     if server_state["nc"]:
         await server_state["nc"].close()
 
