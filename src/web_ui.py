@@ -5,11 +5,32 @@ import json
 import threading
 import queue
 import time
+import wave  # <--- Added
+import uuid  # <--- Added
 from scipy import signal
 import os
 from config import Config
 
 WS_URL = getattr(Config, "WS_URL", "ws://10.0.0.27:30081/ws/realtime")
+
+
+# --- DEBUG HELPER ---
+def save_debug_wav(audio_int16, label):
+    """Saves audio chunk to /tmp for debugging"""
+    try:
+        # Generate a unique filename
+        filename = f"/tmp/debug_1_webui_{label}_{uuid.uuid4().hex[:4]}.wav"
+        with wave.open(filename, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(16000)
+            wav_file.writeframes(audio_int16.tobytes())
+        print(f"💾 [DEBUG] Saved WebUI audio: {filename}")
+    except Exception as e:
+        print(f"❌ Failed to save debug wav: {e}")
+
+
+# --------------------
 
 
 class RealtimeClient:
@@ -37,7 +58,6 @@ class RealtimeClient:
     def _recv_loop(self):
         while self.running and self.connected:
             try:
-                # 设置超时以便线程能响应关闭信号
                 self.ws.settimeout(1)
                 msg = self.ws.recv()
                 data = json.loads(msg)
@@ -53,28 +73,23 @@ class RealtimeClient:
         if not self.connected or self.ws is None:
             return
 
-        # --- 1. 立体声转单声道 (关键) ---
-        # Gradio 有时会给 (N, 2) 的数据
+        # --- 1. Stereo to Mono ---
         if len(data.shape) > 1:
             data = np.mean(data, axis=1)
 
-        # --- 2. 重采样 (44100/48000 -> 16000) ---
+        # --- 2. Resample (to 16000) ---
         target_sr = 16000
         if sr != target_sr:
             num_samples = int(len(data) * target_sr / sr)
-            # resample 返回的是 float64
             data = signal.resample(data, num_samples)
 
-        # --- 3. 类型转换 (Float -> Int16) ---
-        # 确保数据在 -1.0 到 1.0 之间
-        max_val = np.abs(data).max()
-        if max_val > 0:
-            # 简单的归一化，防止爆音 (可选)
-            # data = data / max_val
-            pass
-
-        # 转换为 Int16 PCM
+        # --- 3. Convert to Int16 ---
         data_int16 = (data * 32767).astype(np.int16)
+
+        # --- DEBUG SAVE POINT 1: Before Network Send ---
+        # Save every chunk to verify local mic input is good
+        save_debug_wav(data_int16, "sent")
+        # -----------------------------------------------
 
         try:
             self.ws.send_binary(data_int16.tobytes())
@@ -97,7 +112,7 @@ class RealtimeClient:
         self.latency_info = "Latency: N/A"
 
 
-# --- Session 管理 ---
+# --- Session Management ---
 clients = {}
 
 
@@ -113,28 +128,24 @@ def process_stream(audio, current_text, request: gr.Request):
 
     client = get_client(request.session_hash)
 
-    # 确保连接
+    # Ensure connection
     if not client.connected:
         client.connect()
 
     sr, y = audio
 
-    # 1. 发送音频数据
+    # 1. Send Audio
     client.send_audio_chunk(sr, y)
 
-    # 2. 处理接收队列 (非阻塞)
+    # 2. Process Receive Queue
     try:
         while not client.recv_queue.empty():
             msg = client.recv_queue.get_nowait()
-
             if msg.get("type") == "update":
-                # 拼接文本
                 text_chunk = msg.get("text", "")
                 latency = msg.get("latency", 0)
-
                 client.full_text += text_chunk
                 client.latency_info = f"Latency: {latency:.3f}s"
-
     except Exception:
         pass
 
@@ -148,15 +159,12 @@ def on_clear(request: gr.Request):
 
 
 def on_stop(request: gr.Request):
-    """当停止录音或关闭页面时触发"""
     uid = request.session_hash
     if uid in clients:
         clients[uid].close()
-        # 这里不一定要 del，因为用户可能马上又要录，保持连接池也可以
-        # del clients[uid]
 
 
-# --- UI 构建 ---
+# --- UI Build ---
 with gr.Blocks(title="ASR Realtime Client") as demo:
     gr.Markdown("### 🎙️ Distributed ASR Realtime Client")
     gr.Markdown(f"Connecting to: `{WS_URL}`")
@@ -180,20 +188,13 @@ with gr.Blocks(title="ASR Realtime Client") as demo:
                 interactive=False,
             )
 
-    # 事件绑定
     stream_event = input_audio.stream(
         fn=process_stream,
         inputs=[input_audio, output_display],
         outputs=[output_display, latency_display],
         show_progress=False,
     )
-
-    # 停止录音时断开连接 (可选，或者保持连接)
-    # input_audio.stop_recording(fn=on_stop)
-
-    # 清除按钮
     clear_btn.click(fn=on_clear, inputs=[], outputs=[output_display, latency_display])
 
 if __name__ == "__main__":
-    # 允许局域网访问
     demo.queue().launch(server_name="0.0.0.0", server_port=7860)
