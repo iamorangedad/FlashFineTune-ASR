@@ -3,7 +3,7 @@ import json
 import base64
 import time
 import uuid
-import wave  # <--- Added
+import wave
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from contextlib import asynccontextmanager
 import nats
@@ -11,24 +11,6 @@ from src.config import Config
 from src.logger import setup_logger
 
 logger = setup_logger("gateway")
-
-
-# --- DEBUG HELPER ---
-def save_debug_wav(audio_bytes, req_id):
-    """Saves raw bytes (PCM 16k 16bit) to /tmp for debugging"""
-    try:
-        filename = f"/tmp/debug_2_gateway_{req_id}.wav"
-        with wave.open(filename, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)  # 16-bit
-            wav_file.setframerate(16000)
-            wav_file.writeframes(audio_bytes)
-        logger.info(f"💾 [DEBUG] Saved Gateway audio: {filename}")
-    except Exception as e:
-        logger.error(f"❌ Failed to save debug wav: {e}")
-
-
-# --------------------
 
 
 class ConnectionManager:
@@ -161,11 +143,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 prompt_text = manager.get_history(session_id)
                 req_id = str(uuid.uuid4())
                 buffer_size = len(audio_buffer)
-
-                # --- DEBUG SAVE POINT 2: Before NATS Publish ---
-                # Check if audio is valid here (Gateway received it correctly)
-                save_debug_wav(audio_buffer, req_id)
-                # -----------------------------------------------
 
                 payload = {
                     "req_id": req_id,
