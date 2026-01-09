@@ -5,3 +5,6 @@ nats-py
 boto3
 pymongo
 faster-whisper
+scipy
+websocket-client
+gradio

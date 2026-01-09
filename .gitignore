@@ -1,2 +1,5 @@
 *__pycache__
 tips.txt
+*.drawio
+*.drawio.bkp
+tmp/*

@@ -53,7 +53,7 @@ spec:
       volumes:
         - name: code-volume
           hostPath:
-            path: /home/mac/FlashFineTune-ASR/session_log
+            path: /home/mac/FlashFineTune-ASR
             type: Directory
 ---
 # 网关的 Service (NodePort)
@@ -103,7 +103,7 @@ spec:
       volumes:
         - name: code-volume
           hostPath:
-            path: /home/mac/FlashFineTune-ASR/session_log
+            path: /home/mac/FlashFineTune-ASR
             type: Directory
 ---
 apiVersion: apps/v1
@@ -156,7 +156,66 @@ spec:
           hostPath:
             # 注意：这是 Jetson 节点上的路径，确保该路径存在代码！
             # 如果 Jetson 上没有代码，你需要先 SCP 过去，或者打进镜像里
-            path: /home/jetson/FlashFineTune-ASR/session_log/
+            path: /home/jetson/FlashFineTune-ASR
             type: Directory   
 ---
+# --- NEW SECTION: Web UI Deployment ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asr-web-ui
+  labels:
+    app: asr-web-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: asr-web-ui
+  template:
+    metadata:
+      labels:
+        app: asr-web-ui
+    spec:
+      # Run on Raspberry Pi to save Jetson GPU for inference
+      nodeName: raspberrypi
+      containers:
+        - name: web-ui
+          image: flash-asr:1.1
+          imagePullPolicy: IfNotPresent
+          # Assuming you saved the code as src/web_ui.py
+          command: ["python", "-m", "src.web_ui"]
+          env:
+            - name: PYTHONPATH
+              value: "/app/src"          
+          ports:
+            - containerPort: 7860
+          envFrom:
+            - configMapRef:
+                name: asr-config
+          volumeMounts:
+            - mountPath: /app
+              name: code-volume
+      volumes:
+        - name: code-volume
+          hostPath:
+            # Ensure code exists here on the Pi
+            path: /home/mac/FlashFineTune-ASR
+            type: Directory
+
+---
+# --- NEW SECTION: Web UI Service ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: asr-web-ui-svc
+spec:
+  type: NodePort
+  selector:
+    app: asr-web-ui
+  ports:
+    - protocol: TCP
+      port: 7860
+      targetPort: 7860
+      # You can access the UI at http://10.0.0.27:30082
+      nodePort: 30082
             
