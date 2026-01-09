@@ -102,6 +102,8 @@ class ASRWorker:
                 # 1. 存储服务 (Storage Worker) 存数据库
                 # 2. 网关服务 (Gateway) 发回给前端
                 await self.js.publish("asr.output", json.dumps(output_payload).encode())
+            else:
+                print(f"No transcribe result!!!")
 
             # 5. 确认消息 (Ack)
             await msg.ack()
