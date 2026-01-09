@@ -7,6 +7,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from contextlib import asynccontextmanager
 import nats
 from src.config import Config
+from src.logger import setup_logger  # Import your logger
+
+# Initialize Logger
+logger = setup_logger("gateway")
 
 
 # --- 会话管理器 ---
@@ -21,17 +25,32 @@ class ConnectionManager:
             "ws": websocket,
             "history": "",  # 在网关层维护上下文，让 Worker 无状态
         }
+        logger.info(
+            f"✅ WebSocket session accepted: {session_id}",
+            extra={"session_id": session_id},
+        )
 
     def disconnect(self, session_id: str):
         if session_id in self.active_sessions:
             del self.active_sessions[session_id]
+            logger.info(
+                f"🔌 WebSocket session removed: {session_id}",
+                extra={"session_id": session_id},
+            )
 
     async def send_text(self, session_id: str, text: str, latency: float):
         if session_id in self.active_sessions:
             ws = self.active_sessions[session_id]["ws"]
             try:
                 await ws.send_json({"type": "update", "text": text, "latency": latency})
-            except Exception:
+                logger.info(
+                    f"📤 Sent update to client: '{text}' (Latency: {latency:.3f}s)",
+                    extra={"session_id": session_id},
+                )
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Failed to send to client: {e}", extra={"session_id": session_id}
+                )
                 pass  # 连接可能已断开
 
     def update_history(self, session_id: str, new_text: str):
@@ -57,8 +76,17 @@ async def handle_asr_result(msg):
     try:
         data = json.loads(msg.data.decode())
         session_id = data.get("session_id")
+        req_id = data.get(
+            "req_id", "N/A"
+        )  # Get req_id from worker response if available
         text = data.get("text")
         latency = data.get("latency", 0)
+
+        # Log the raw receipt
+        logger.info(
+            f"📥 Received ASR Result via NATS: '{text}'",
+            extra={"session_id": session_id, "req_id": req_id},
+        )
 
         if session_id and text:
             # 1. 更新网关维护的上下文
@@ -66,31 +94,41 @@ async def handle_asr_result(msg):
 
             # 2. 推送给前端 Gradio
             await manager.send_text(session_id, text, latency)
+        else:
+            logger.debug(
+                "Received empty or invalid payload", extra={"session_id": session_id}
+            )
 
         await msg.ack()
     except Exception as e:
-        print(f"❌ Gateway Error handling NATS msg: {e}")
+        logger.error(f"❌ Gateway Error handling NATS msg: {e}", exc_info=True)
 
 
 # --- 生命周期管理 ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. 连接 NATS
-    print(f"🔌 [Gateway] Connecting to NATS: {Config.NATS_URL}")
-    server_state["nc"] = await nats.connect(Config.NATS_URL)
-    server_state["js"] = server_state["nc"].jetstream()
+    logger.info(f"🔌 [Gateway] Connecting to NATS: {Config.NATS_URL} ...")
+    try:
+        server_state["nc"] = await nats.connect(Config.NATS_URL)
+        server_state["js"] = server_state["nc"].jetstream()
+        logger.info("✅ [Gateway] NATS Connected successfully")
 
-    # 2. 订阅 ASR 结果
-    # 注意：Gateway 是广播接收，需要根据 session_id 自己做路由
-    await server_state["js"].subscribe(
-        "asr.output",
-        cb=handle_asr_result,
-        durable="gateway_router",  # 保证断连后能收到离线消息(可选)
-    )
-    print("✅ [Gateway] Listening for ASR results...")
+        # 2. 订阅 ASR 结果
+        # 注意：Gateway 是广播接收，需要根据 session_id 自己做路由
+        await server_state["js"].subscribe(
+            "asr.output",
+            cb=handle_asr_result,
+            durable="gateway_router",  # 保证断连后能收到离线消息(可选)
+        )
+        logger.info("✅ [Gateway] Listening for 'asr.output'...")
+    except Exception as e:
+        logger.critical(f"❌ [Gateway] NATS Connection Failed: {e}", exc_info=True)
+        # In production you might want to exit here, but for now we yield
 
     yield
 
+    logger.info("🛑 [Gateway] Shutting down...")
     if server_state["nc"]:
         await server_state["nc"].close()
 
@@ -102,7 +140,9 @@ app = FastAPI(lifespan=lifespan)
 async def websocket_endpoint(websocket: WebSocket):
     # 为每个连接生成唯一的 Session ID
     session_id = str(uuid.uuid4())
-    print(f"🔌 Client connected: {session_id}")
+    logger.info(
+        f"🔌 Client connecting... ID: {session_id}", extra={"session_id": session_id}
+    )
 
     await manager.connect(session_id, websocket)
 
@@ -125,8 +165,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 准备发送给 NATS 的 Payload
                 # 获取当前会话的上下文
                 prompt_text = manager.get_history(session_id)
-
                 req_id = str(uuid.uuid4())
+
+                # Log BEFORE sending
+                buffer_size = len(audio_buffer)
+
                 payload = {
                     "req_id": req_id,
                     "session_id": session_id,
@@ -140,6 +183,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     await server_state["js"].publish(
                         "asr.input", json.dumps(payload).encode()
                     )
+                    logger.info(
+                        f"🚀 Published Audio Chunk ({buffer_size} bytes) to NATS",
+                        extra={"req_id": req_id, "session_id": session_id},
+                    )
+                else:
+                    logger.error(
+                        "❌ NATS JetStream is not available!",
+                        extra={"session_id": session_id},
+                    )
 
                 # 清空缓冲
                 audio_buffer.clear()
@@ -148,14 +200,19 @@ async def websocket_endpoint(websocket: WebSocket):
             # if data == b"EOF": ...
 
     except WebSocketDisconnect:
-        print(f"👋 Client disconnected: {session_id}")
+        logger.info(
+            f"👋 Client disconnected: {session_id}", extra={"session_id": session_id}
+        )
         manager.disconnect(session_id)
     except Exception as e:
-        print(f"❌ WebSocket Error: {e}")
+        logger.error(
+            f"❌ WebSocket Error: {e}", extra={"session_id": session_id}, exc_info=True
+        )
         manager.disconnect(session_id)
 
 
 if __name__ == "__main__":
     import uvicorn
 
+    # Make sure to bind 0.0.0.0 for K8s
     uvicorn.run(app, host=Config.API_HOST, port=Config.API_PORT)
