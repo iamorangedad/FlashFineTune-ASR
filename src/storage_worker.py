@@ -7,6 +7,7 @@ import nats
 import boto3
 from pymongo import MongoClient
 from io import BytesIO
+import wave
 from src.config import Config
 from src.logger import setup_logger
 
