@@ -30,7 +30,7 @@ class Config:
     MONGO_DB = "asr_data"
 
     # --- MinIO/S3 (音频文件存储) ---
-    S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://10.0.0.27:39001")
+    S3_ENDPOINT = os.getenv("S3_ENDPOINT", "http://10.0.0.27:30091")
     S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "admin")
     S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "password123")
     S3_BUCKET = "audio"
